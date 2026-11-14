@@ -4,9 +4,11 @@ using SalesManagementSystem.Domain.Repositories;
 namespace SalesManagementSystem.Infrastructure.Repositories;
 
 /// <summary>
-/// In-memory implementation backed by a simple dictionary.
-/// Demonstrates that the business layer works against the
-/// <see cref="ICustomerRepository"/> contract only.
+/// Dictionary-backed, standalone implementation of
+/// <see cref="ICustomerRepository"/>. Unlike
+/// <c>DatabaseCustomerRepository</c>, this one keeps its own storage,
+/// which makes it ideal for unit tests and for demonstrating that the
+/// application layer cannot tell the two apart.
 /// </summary>
 public sealed class InMemoryCustomerRepository : ICustomerRepository
 {
@@ -19,7 +21,7 @@ public sealed class InMemoryCustomerRepository : ICustomerRepository
     }
 
     public Customer? FindById(int customerId)
-        => _customers.TryGetValue(customerId, out var c) ? c : null;
+        => _customers.TryGetValue(customerId, out var customer) ? customer : null;
 
     public bool Update(int id, string name, string email, string phone)
     {
@@ -30,7 +32,8 @@ public sealed class InMemoryCustomerRepository : ICustomerRepository
         return true;
     }
 
-    public IReadOnlyList<Customer> GetAll() => _customers.Values.OrderBy(c => c.Id).ToList();
+    public IReadOnlyList<Customer> GetAll()
+        => _customers.Values.OrderBy(c => c.Id).ToList();
 
     public bool Delete(int id) => _customers.Remove(id);
 }

@@ -38,7 +38,9 @@ SalesManagementSystem/
 │   └── Repositories/     ICustomerRepository
 ├── Application/          CustomerService (use cases)
 ├── Infrastructure/
-│   └── Repositories/     InMemoryCustomerRepository, ArrayCustomerRepository
+│   ├── Persistence/      Database (aggregate root)
+│   └── Repositories/     DatabaseCustomerRepository,
+│                         InMemoryCustomerRepository
 └── Program.cs            demo runner
 ```
 
@@ -55,6 +57,22 @@ Program ──▶ Application ──▶ Domain
 `ICustomerRepository`. `Infrastructure` plugs into it. That is the
 **Dependency Inversion Principle** in practice.
 
+### The `Database` aggregate root
+
+The original draft kept four fixed arrays (`Employees[20]`,
+`Customers[30]`, `Products[60]`, `Orders[50]`) with nullable slots.
+That version is replaced by a `Database` class that **owns typed
+collections through composition** and exposes read-only projections:
+
+```csharp
+public IReadOnlyList<Employee> Employees => _employees;
+public decimal TotalPayroll() => _employees.Sum(e => e.CalculateSalary());
+public decimal TotalRevenue() => _orders.Where(o => o.Status == OrderStatus.Paid).Sum(o => o.Total);
+```
+
+Callers can read everything but can only mutate through the
+repositories — so business invariants cannot be bypassed.
+
 ---
 
 ## 🎯 OOP concepts demonstrated
@@ -67,8 +85,10 @@ Program ──▶ Application ──▶ Domain
 | **Encapsulation** | Private backing fields + validated setters that throw |
 | **Interfaces** | `IApprovable`, `IReportable`, `INotifiable`, `ICustomerRepository`, `IPaymentMethod` |
 | **Interface segregation** | A role implements only the capabilities it actually has |
-| **Repository pattern** | Swap `InMemoryCustomerRepository` ⇄ `ArrayCustomerRepository` without touching services |
+| **Repository pattern** | Swap `DatabaseCustomerRepository` ⇄ `InMemoryCustomerRepository` without touching services |
 | **Strategy pattern** | `IPaymentMethod` — cash / credit card / bank transfer |
+| **Composition** | `Database` *has* employees, customers, products and orders |
+| **Aggregate root** | `Database` is the single entry point to persisted collections |
 | **State machine** | `Order`: Pending → Confirmed → Paid, with illegal transitions rejected |
 | **Null safety** | `Customer?` / `Product?` with `ThrowIfNull` |
 
@@ -80,13 +100,17 @@ The starting point was an early student version. These issues were fixed:
 
 | Issue | Fix |
 |---|---|
-| **`Customer.Phone` setter assigned `Phone = value`** (infinite recursion → StackOverflow) | Now writes to a private backing field |
+| **`Customer.Phone` setter assigned `Phone = value`** (infinite recursion → StackOverflow) | Writes to a private backing field |
+| **`Product.Price` / `StockQuantity` getters returned themselves** (same recursion bug, found in the other draft) | Backing fields |
+| **`OrderItem` computed `UnitPrice = quantity * price`** then multiplied by quantity again — every invoice was wrong by a factor of the quantity | `LineTotal => Price * Quantity` |
 | `manager.cs` used `this.Id` while the base class defined `ID` | Unified to `Id` |
 | `DEVELOPERMANAGEMENT.cs` had an extra `}` — project did not compile | Corrected structure |
 | No `Program.cs` — nothing could run | Added a full demo runner |
 | Classes nested inside empty wrapper classes for no reason | Flattened into namespaces |
 | Errors printed with `Console.WriteLine("error")` | Replaced with real exceptions |
 | Misleading file names (`PROUDCT.cs`, `CUSTOMETR.cs`, `Orderiteam.cs`) | Renamed to the real type names |
+| Two identical repositories, one dishonestly named `SQLCUSTOMERMANAGEMENT` | One honest `DatabaseCustomerRepository` + one isolated `InMemoryCustomerRepository` |
+| Fixed-size arrays with nullable slots | `Database` aggregate root with typed collections |
 
 ---
 
@@ -104,8 +128,8 @@ Requirements: .NET 8 SDK or newer.
 
 - [ ] Unit tests (xUnit) for salary rules and the order lifecycle
 - [ ] Replace in-memory storage with EF Core + SQL Server
-- [ ] Add a `ReadOnly` `GetAll` paging overload
 - [ ] Extract payroll calculation into a dedicated `PayrollService`
+- [ ] Add pagination to `ICustomerRepository.GetAll`
 
 ---
 
